@@ -17,7 +17,8 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Comando vital: Instala os binários do Chromium e as dependências nativas
 # Apenas Chromium para economizar RAM e disco
-RUN playwright install --with-deps chromium \
+RUN playwright install chromium \
+    && playwright install-deps chromium \
     && rm -rf /var/lib/apt/lists/*
 
 # Copia o resto do código da aplicação
