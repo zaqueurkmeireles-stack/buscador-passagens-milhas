@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  # Serviço Principal: O Bot do Telegram rodando o event loop do Aiogram
+  app:
+    build: .
+    container_name: travel_agent_bot
+    command: python -m bot.main
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # Serviço Celery: O "músculo" que roda o Scraper em background nas madrugadas
+  worker:
+    build: .
+    container_name: travel_agent_worker
+    command: celery -A workers.tasks worker --loglevel=info
+    env_file:
+      - .env
+    depends_on:
+      - redis
+    restart: unless-stopped
+
+  # Broker de Mensagens para o Celery
+  redis:
+    image: redis:alpine
+    container_name: travel_agent_redis
+    ports:
+      - "6379:6379"
+    restart: unless-stopped
