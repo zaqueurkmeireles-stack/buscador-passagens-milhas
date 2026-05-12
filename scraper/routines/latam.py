@@ -28,13 +28,35 @@ class LatamScraper(ScrapingEngine):
         async with async_playwright() as p:
             # 1. Inicia o contexto do browser herdando a proteção
             logger.info("Iniciando browser engine para Latam...")
-            browser, context, page = await self.init_browser_context(p, airline_name="latam", headless=False)
+            browser, context, page = await self.init_browser_context(p, airline_name="latam")
             
             try:
                 # 2. Acessa a página inicial
                 logger.info("Acessando a página inicial da Latam...")
                 await page.goto("https://www.latamairlines.com/br/pt", wait_until="domcontentloaded")
                 
+                # 2.1 Verificação de Bloqueio WAF (Acesso Negado - Akamai)
+                logger.info("Verificando possível bloqueio de Acesso Negado (Akamai)...")
+                try:
+                    # O seletor procura por parte do texto visto na imagem de bloqueio "bloqueio.png"
+                    access_denied_locator = page.locator("text=/Por motivos de seguridad|Por razões de segurança/i").first
+                    await access_denied_locator.wait_for(state="visible", timeout=3000)
+                    
+                    logger.error("Tela de 'Acesso Negado' (Akamai) detectada. Tentando evasão por reload...")
+                    await page.wait_for_timeout(3000)
+                    await page.reload(wait_until="domcontentloaded")
+                    await page.wait_for_timeout(2000)
+                    
+                    if await access_denied_locator.is_visible():
+                        raise Exception("Bloqueio WAF (Akamai) persistente. Rotação de IP ou ajuste de Stealth necessário.")
+                except TimeoutError:
+                    logger.info("Nenhum bloqueio de Acesso Negado detectado. Prosseguindo...")
+                except Exception as e:
+                    # Ignora outros erros menores para não travar o fluxo prematuramente caso não seja uma exception crítica
+                    if "Bloqueio WAF" in str(e):
+                        raise e
+                    logger.debug(f"Aviso durante a verificação de bloqueio: {e}")
+
                 # 3. Tratamento de Pop-ups (Cookies e Ofertas)
                 try:
                     # Timeout curto de 4 segundos para evitar atrasar o motor

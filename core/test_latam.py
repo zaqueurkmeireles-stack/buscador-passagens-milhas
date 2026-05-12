@@ -3,9 +3,9 @@ from scraper.engine import ScrapingEngine
 from scraper.routines.latam import LatamScraper
 
 async def run_test():
-    print("[Teste Vertical] A iniciar o motor base com o ecrã visível...")
-    # headless=False é crucial aqui para podermos ver os movimentos do robô
-    engine = ScrapingEngine(headless=False)
+    print("[Teste Vertical] A iniciar o motor base em modo headless (invisível)...")
+    # headless=True para execução em background/VPS
+    engine = ScrapingEngine(headless=True)
     scraper = LatamScraper(engine)
 
     print("[Teste Vertical] A arrancar com a pesquisa GRU -> LIS...")
@@ -17,7 +17,7 @@ async def run_test():
         is_award=False
     )
     
-    input("[Teste Vertical] Execução finalizada. Verifique o navegador e pressione Enter aqui para fechar...")
+    print("[Teste Vertical] Execução finalizada com sucesso.")
 
 if __name__ == "__main__":
     asyncio.run(run_test())

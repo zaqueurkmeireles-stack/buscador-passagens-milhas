@@ -1,11 +1,11 @@
-﻿import asyncio
+import asyncio
 import sys
 from scraper.engine import ScrapingEngine
 from scraper.routines.latam import LatamScraper
 
 async def run_test():
     print('[Teste Vertical] A iniciar o motor base...')
-    engine = ScrapingEngine(headless=False)
+    engine = ScrapingEngine(headless=True)
     scraper = LatamScraper(engine)
 
     print('[Teste Vertical] A pesquisar GRU -> LIS para 15/09/2026...')
@@ -19,7 +19,7 @@ async def run_test():
     except Exception as e:
         print(f'[ERRO] Ocorreu um problema: {e}')
     
-    input('[Teste Vertical] Fim. Verifique o navegador e pressione Enter para fechar...')
+    print('[Teste Vertical] Fim. Verifique o log para detalhes...')
 
 if __name__ == '__main__':
     asyncio.run(run_test())
