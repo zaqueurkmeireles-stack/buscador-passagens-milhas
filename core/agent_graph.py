@@ -1,160 +1,119 @@
-import json
 import logging
-import operator
-from typing import TypedDict, Annotated, Sequence, Dict, Any
-from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
-from langgraph.graph import StateGraph, END
-from langchain_google_genai import ChatGoogleGenerativeAI
-from supabase.client import create_client
+from typing import Dict, Any, Literal
+from langchain_core.messages import HumanMessage, SystemMessage, AIMessage
+from langgraph.graph import StateGraph, START, END
+from langgraph.prebuilt import ToolNode
 
-from core.rag_engine import RAGEngine
-from core.config import config
+from core.agent_state import AgentState
+from core.skills_registry import registry
+from core.health_matrix import get_redundant_llm
+from core.llm_engine import LLMEngine
 
 logger = logging.getLogger(__name__)
 
-# --- DEFINIÇÃO DO ESTADO GLOBAL DO GRAFO ---
-class AgentState(TypedDict):
-    """Estado tipado que percorre todos os nós do LangGraph."""
-    messages: Annotated[Sequence[BaseMessage], operator.add]
-    original_text: str
-    extracted_params: Dict[str, Any]
-    rag_context: str
-    mileage_balances: Dict[str, int]
-    final_response: str
+# Recupera todas as tools registradas no sistema
+tools = registry.get_all_tools()
 
-# Instanciação estática de serviços e LLMs para uso nos nós
-try:
-    llm_extractor = ChatGoogleGenerativeAI(model="gemini-flash-latest", api_key=config.GEMINI_API_KEY, temperature=0.1)
-    llm_consensus = ChatGoogleGenerativeAI(model="gemini-pro-latest", api_key=config.GEMINI_API_KEY, temperature=0.3)
-    rag_engine = RAGEngine()
-    supabase = create_client(config.SUPABASE_URL, config.SUPABASE_KEY)
-except Exception as e:
-    logger.error(f"Erro ao instanciar os motores na inicialização do Grafo: {e}")
+# Cria o nó de ferramentas pré-construído do LangGraph
+tool_node = ToolNode(tools)
 
-# ==========================================
-# DEFINIÇÃO DOS NÓS (NODES) DO LANGGRAPH
-# ==========================================
+# Puxa o LLM primário (Gemini) com fallback silencioso para redundância
+llm = get_redundant_llm()
 
-async def node_extract_intent(state: AgentState) -> AgentState:
-    """Nó 1: Usa o LLM para extrair parâmetros matemáticos (Destino, Preço, Pessoas)."""
-    logger.info(">>> Executando Node 1: Intent & Extract")
-    text = state.get("original_text", "")
-    
-    prompt = f"""Você é o extrator mestre do Personal Travel AI Agent.
-    Analise a seguinte solicitação: '{text}'
-    
-    Retorne EXCLUSIVAMENTE um objeto JSON contendo:
-    "destination": (string ou null se não houver),
-    "price_alert": (number ou null),
-    "people": (integer, assuma 1 se implícito),
-    "requires_rag": (booleano, obrigatoriamente true se mencionar hotel, voucher, viagem atual, check-in ou regras passadas, senao false)
-    """
-    
-    try:
-        response = await llm_extractor.ainvoke([HumanMessage(content=prompt)])
-        content = response.content
-        if isinstance(content, list):
-            content = "".join([str(p) for p in content])
-        raw_text = content.strip().strip("```json").strip("```").strip()
-        params = json.loads(raw_text)
-        logger.info(f"Parâmetros extraídos: {params}")
-    except Exception as e:
-        logger.error(f"Erro crasso no parser de extração JSON: {e}")
-        params = {"requires_rag": False, "error": str(e)}
-        
-    return {"extracted_params": params}
+# Anexa (bind) as ferramentas ao LLM para que ele saiba usá-las
+llm_with_tools = llm.bind_tools(tools)
 
-async def node_rag_retrieval(state: AgentState) -> AgentState:
-    """Nó 2: Se o usuário mencionar a viagem atual/vouchers, busca no RAG."""
-    logger.info(">>> Executando Node 2: Knowledge Retrieval")
-    params = state.get("extracted_params", {})
-    text = state.get("original_text", "")
+# Instancia a engine base apenas para recuperar a persona (System Prompt) do Travel Hacker
+engine = LLMEngine()
+travel_hacker_prompt = engine.system_prompt
+
+async def call_model(state: AgentState) -> dict:
+    """Nó principal que invoca o LLM com o estado atual e as ferramentas."""
+    logger.info(">>> Executando Node: call_model")
+    messages = state.get("messages", [])
     
-    if not params.get("requires_rag", False):
-        logger.info("RAG bypassado (não exigido).")
-        return {"rag_context": "Sem contexto documental extra."}
+    # Se não houver SystemMessage na lista, injeta no início para garantir a persona
+    if not messages or not isinstance(messages[0], SystemMessage):
+        messages = [SystemMessage(content=travel_hacker_prompt)] + list(messages)
         
     try:
-        retriever = rag_engine.get_retriever()
-        docs = await retriever.ainvoke(text)
-        context = "\n".join([d.page_content for d in docs])
-        logger.info(f"Contexto do RAG recuperado. Extensão: {len(context)} chars")
-        return {"rag_context": context}
+        response = await llm_with_tools.ainvoke(messages)
+        # Retornamos apenas a resposta em formato de lista porque o reducer operator.add vai concatenar no estado
+        return {"messages": [response]}
     except Exception as e:
-        logger.error(f"Falha na recuperação do RAG: {e}")
-        return {"rag_context": "Erro ao tentar buscar contexto documental."}
+        logger.error(f"Erro ao chamar LLM: {e}")
+        # Em caso de erro severo, retorna mensagem amigável e encerra
+        error_msg = AIMessage(content="Comandante enfrentando forte turbulência nos satélites de comunicação. Retente em minutos.")
+        return {"messages": [error_msg]}
 
-async def node_database_query(state: AgentState) -> AgentState:
-    """Nó 3: Cruza o alerta desejado com o saldo atual de milhas (Supabase)."""
-    logger.info(">>> Executando Node 3: Database Query")
-    
-    try:
-        # Busca hardcoded para o usuário base Zaqueu
-        # Nota: Tentando 'mile_wallets' se 'MileWallet' falhar no futuro
-        response = supabase.table("MileWallet").select("*").eq("user_id", "zaqueu_master_id").execute()
-        balances = {row["program"]: row["balance"] for row in response.data}
-        logger.info(f"Saldos encontrados: {balances}")
-    except Exception as e:
-        logger.error(f"Supabase offline ou falha na leitura: {e}")
-        balances = {"smiles": 0, "latam": 0}
+def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
+    """Aresta condicional: decide se chama as ferramentas ou encerra o loop."""
+    messages = state.get("messages", [])
+    if not messages:
+        return "__end__"
         
-    return {"mileage_balances": balances}
-
-async def node_consensus_validation(state: AgentState) -> AgentState:
-    """Nó 4: Realiza uma dupla checagem (Consensus) garantindo solidez matemática da emissão."""
-    logger.info(">>> Executando Node 4: Consensus Validation")
+    last_message = messages[-1]
     
-    text = state["original_text"]
-    params = state["extracted_params"]
-    context = state["rag_context"]
-    balances = state["mileage_balances"]
+    # Se o LLM gerou "tool_calls" (intenção de chamar funções/skills)
+    if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
+        logger.info(f"O Agente decidiu usar as skills: {[t['name'] for t in last_message.tool_calls]}")
+        return "tools"
     
-    prompt = f"""Assuma o papel do 'Comandante', o cérebro avançado do Personal Travel AI Agent.
-    Você precisa dar o veredito final ao passageiro. O ambiente de execução exige precisão extrema.
-    
-    MENSAGEM DO USUÁRIO: "{text}"
-    PARÂMETROS EXTRAÍDOS: {params}
-    DADOS DE VOUCHERS/HOTEL (RAG): {context}
-    SALDO REAL DE MILHAS EM BANCO: {balances}
-    
-    DIRETRIZES:
-    1. Cruze a quantidade de pessoas x provável custo da passagem (estime a partir do destino, ou explique se não der).
-    2. Avalie se o saldo atual de milhas nas respectivas companhias suporta a intenção do usuário.
-    3. Responda se as datas cruzam adequadamente com os dados de Voucher (se fornecido).
-    4. Gere uma resposta direta, humana, acolhedora e conclusiva. Se aprovado, afirme. Se as milhas não baterem, recuse com cálculos claros.
-    """
-    
-    try:
-        response = await llm_consensus.ainvoke([HumanMessage(content=prompt)])
-        final_answer = response.content
-    except Exception as e:
-        logger.error(f"Falha do LLM no Consensus Validation: {e}")
-        final_answer = "Comandante aqui: Enfrentamos uma falha de consenso no radar. Repita a operação em minutos."
-    
-    return {"final_response": final_answer}
+    logger.info("O Agente finalizou o raciocínio. Encerrando fluxo.")
+    return "__end__"
 
 # ==========================================
 # COMPILAÇÃO DO STATEGRAPH
 # ==========================================
-def compile_agent_graph() -> Any:
-    """Constrói e compila as arestas lógicas do grafo de agentes."""
+def compile_agent_graph():
+    """Constrói o Grafo do Agente ReAct."""
     workflow = StateGraph(AgentState)
     
-    # Registra nós
-    workflow.add_node("extract", node_extract_intent)
-    workflow.add_node("rag", node_rag_retrieval)
-    workflow.add_node("db", node_database_query)
-    workflow.add_node("consensus", node_consensus_validation)
+    # Adiciona os nós
+    workflow.add_node("agent", call_model)
+    workflow.add_node("tools", tool_node)
     
-    # Ordem de execução (Linear e determinística para este design)
-    workflow.set_entry_point("extract")
-    workflow.add_edge("extract", "rag")
-    workflow.add_edge("rag", "db")
-    workflow.add_edge("db", "consensus")
-    workflow.add_edge("consensus", END)
+    # Define as conexões (Arestas)
+    workflow.add_edge(START, "agent")
     
-    # Compila para gerar a aplicação assíncrona executável
+    workflow.add_conditional_edges(
+        "agent",
+        should_continue,
+        {
+            "tools": "tools",
+            "__end__": END
+        }
+    )
+    
+    workflow.add_edge("tools", "agent")
+    
+    # Compila a aplicação final
     return workflow.compile()
 
-# Ponto de acesso do app
 agent_app = compile_agent_graph()
+
+# ==========================================
+# ENTRYPOINT DO TELEGRAM
+# ==========================================
+async def processar_mensagem_telegram(mensagem: str, chat_id: str) -> str:
+    """
+    Ponto de entrada público para o Bot do Telegram ou Webhooks.
+    Inicializa o estado com a mensagem do utilizador e invoca o grafo.
+    """
+    logger.info(f"Recebendo mensagem do chat {chat_id}: {mensagem}")
+    
+    # Inicializa o estado. Messages deve ser uma lista para o reducer operator.add funcionar
+    initial_state = {
+        "messages": [HumanMessage(content=mensagem)],
+        "intent": None,
+        "extracted_parameters": {},
+        "api_errors": {}
+    }
+    
+    # Invoca o grafo compilado de forma assíncrona
+    final_state = await agent_app.ainvoke(initial_state)
+    
+    # Extrai a última mensagem gerada pelo Agente
+    last_message = final_state["messages"][-1]
+    
+    return last_message.content

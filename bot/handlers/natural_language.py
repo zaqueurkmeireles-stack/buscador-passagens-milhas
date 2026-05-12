@@ -2,7 +2,7 @@ import logging
 import asyncio
 from aiogram import Router, F, types
 from aiogram.exceptions import TelegramAPIError
-from core.agent_graph import agent_app
+from core.agent_graph import processar_mensagem_telegram
 
 logger = logging.getLogger(__name__)
 
@@ -29,25 +29,10 @@ async def process_langgraph_task(bot, chat_id: int, message_id: int, user_text: 
                 
         typing_task = asyncio.create_task(keep_typing())
 
-        # Estado inicial exigido pelo LangGraph
-        initial_state = {
-            "original_text": user_text,
-            "messages": [],
-            "extracted_params": {},
-            "rag_context": "",
-            "mileage_balances": {},
-            "final_response": ""
-        }
-
         logger.info(f"Processando matriz LangGraph em background para o chat_id {chat_id}...")
         
-        # Invoca o grafo (Extract -> RAG -> DB -> Consensus)
-        final_state = await agent_app.ainvoke(initial_state)
-        
-        reply_message = final_state.get(
-            "final_response", 
-            "Comandante, ocorreu uma anomalia nas correntes de jato. O consenso não pôde ser validado."
-        )
+        # Invoca o grafo via entrypoint oficial (Agentic LangGraph)
+        reply_message = await processar_mensagem_telegram(mensagem=user_text, chat_id=str(chat_id))
         
         # Interrompe a animação de digitação
         typing_task.cancel()

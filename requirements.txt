@@ -19,3 +19,4 @@ langsmith
 langchain-community
 langchain-openai
 pypdf
+asyncpg
