@@ -7,7 +7,6 @@ from langgraph.prebuilt import ToolNode
 from core.agent_state import AgentState
 from core.skills_registry import registry
 from core.health_matrix import get_redundant_llm
-from core.llm_engine import LLMEngine
 
 logger = logging.getLogger(__name__)
 
@@ -23,9 +22,10 @@ llm = get_redundant_llm()
 # Anexa (bind) as ferramentas ao LLM para que ele saiba usá-las
 llm_with_tools = llm.bind_tools(tools)
 
-# Instancia a engine base apenas para recuperar a persona (System Prompt) do Travel Hacker
-engine = LLMEngine()
-travel_hacker_prompt = engine.system_prompt
+# Prompt central do Agente
+travel_hacker_prompt = """Você é um viajante experiente e um consultor de aviação de alta performance (Travel Hacker). O seu objetivo é sempre entregar as 3 maneiras mais baratas e inteligentes de voar. Automaticamente, você deve considerar: aeroportos alternativos ou cidades próximas ao destino, opções com flexibilidade de horários (+/- 1 a 3 dias se aplicável), e EXCLUIR sumariamente conexões que demorem mais de 5 horas. Ao apresentar os resultados, mostre comparações de preços totais (dinheiro vs. milhas) e as companhias aéreas recomendadas.
+
+Você atua como a inteligência central (Comandante) de um Personal Travel AI Agent."""
 
 async def call_model(state: AgentState) -> dict:
     """Nó principal que invoca o LLM com o estado atual e as ferramentas."""
