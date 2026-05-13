@@ -42,5 +42,16 @@ class Config:
     
     # Telegram
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+    ADMIN_CHAT_ID = os.getenv("ADMIN_CHAT_ID")
+
+    # Travel Hacking & Arbitragem de Milhas
+    # Tequila (Kiwi) - reservado para quando a key estiver disponível
+    TEQUILA_API_KEY = os.getenv("TEQUILA_API_KEY")
+    # Seats.aero - plano PRO necessário para inventário Award global
+    SEATS_AERO_API_KEY = os.getenv("SEATS_AERO_API_KEY")
+    # CPM fixo em R$ (ex: compra com 50% off na Livelo/Esfera = R$ 35/1000 pts)
+    DEFAULT_CPM_BRL = float(os.getenv("DEFAULT_CPM_BRL", "35.00"))
+    # Intervalo em horas para o worker de arbitragem rodar (padrão: 4h)
+    ARBITRAGE_CHECK_INTERVAL_HOURS = int(os.getenv("ARBITRAGE_CHECK_INTERVAL_HOURS", "4"))
 
 config = Config()

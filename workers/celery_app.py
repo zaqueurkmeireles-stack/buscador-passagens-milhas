@@ -1,5 +1,6 @@
 import os
 from celery import Celery
+from celery.schedules import crontab, timedelta
 from core.config import config
 
 # Configuração Base do Celery
@@ -15,15 +16,26 @@ celery_app = Celery(
         'workers.sniper_calendario',
         'workers.golden_windows',
         'workers.positioning',
-        'workers.cpm_engine'
+        'workers.cpm_engine',
     ]
 )
+
+# Intervalo de verificação de arbitragem (em horas, configurado no .env)
+_arbitrage_interval_h = config.ARBITRAGE_CHECK_INTERVAL_HOURS
+
+celery_app.conf.beat_schedule = {
+    # Worker de Arbitragem de Milhas (CPM Engine)
+    'arbitrage-check-every-n-hours': {
+        'task': 'workers.cpm_engine.run_arbitrage_check',
+        'schedule': timedelta(hours=_arbitrage_interval_h),
+    },
+}
 
 celery_app.conf.update(
     task_serializer='json',
     accept_content=['json'],
     result_serializer='json',
-    timezone='UTC',
+    timezone='America/Sao_Paulo',
     enable_utc=True,
 )
 
