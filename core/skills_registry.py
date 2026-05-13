@@ -28,8 +28,6 @@ class SkillsRegistry:
         """Retorna todas as tools disponíveis para o bind."""
         return self.tools
 
-        return self.tools
-
 @tool
 def busca_inteligente_travel_hacker(
     origem: str, 
