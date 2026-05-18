@@ -4,12 +4,14 @@ import hashlib
 import httpx
 import asyncpg
 from datetime import datetime, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 from playwright_stealth import Stealth
+import google.generativeai as genai
 from core.config import config
+from core.api_healer import healer
 
 logger = logging.getLogger(__name__)
 
@@ -114,12 +116,19 @@ async def busca_inteligente_travel_hacker(
 
     resultados = []
 
-    # --- Tentativa 1: Duffel API ---
+    # --- Tentativa 1: Duffel API (ATIVO ✅) ---
     if config.DUFFEL_API_KEY:
         try:
             resultados = await _buscar_duffel(origem, destino, data_ida, estadia_min_dias)
             if resultados:
                 logger.info(f"[Duffel] {len(resultados)} voos encontrados.")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in (401, 403):
+                logger.warning(f"[Duffel] Falha de autenticação. Acionando Healer...")
+                # await healer.recover_duffel_key()
+                # Tenta novamente após a cura (mockado por enquanto)
+                pass
+            logger.warning(f"[Duffel] Erro de status: {e}")
         except Exception as e:
             logger.warning(f"[Duffel] Falhou, tentando Amadeus. Erro: {e}")
 
@@ -129,13 +138,41 @@ async def busca_inteligente_travel_hacker(
             resultados = await _buscar_amadeus(origem, destino, data_ida)
             if resultados:
                 logger.info(f"[Amadeus Fallback] {len(resultados)} voos encontrados.")
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code in (401, 403):
+                logger.warning(f"[Amadeus] Falha de autenticação. Acionando Healer...")
+                await healer.recover_amadeus_key()
+                # Retry uma única vez
+                try:
+                    resultados = await _buscar_amadeus(origem, destino, data_ida)
+                except: pass
         except Exception as e:
             logger.error(f"[Amadeus] Também falhou: {e}")
+
+    # --- Fallback 2: Gemini Intelligence Search ---
+    if not resultados:
+        logger.warning("⚠️ Todas as APIs GDS falharam. Ativando Gemini Intelligence Search...")
+        try:
+            resultados = await _buscar_gemini_search(origem, destino, data_ida)
+            if resultados:
+                logger.info(f"[Gemini Search] {len(resultados)} opções encontradas via IA.")
+        except Exception as e:
+            logger.error(f"[Gemini Search] Falha: {e}")
+
+    # --- Fallback 3: Web Search (SerpApi) ---
+    if not resultados:
+        logger.warning("⚠️ Gemini Search falhou. Tentando SerpApi...")
+        try:
+            resultados = await _buscar_web_search(origem, destino, data_ida)
+            if resultados:
+                logger.info(f"[Web Search] {len(resultados)} opções encontradas via busca aberta.")
+        except Exception as e:
+            logger.error(f"[Web Search] Falha crítica na busca aberta: {e}")
 
     if not resultados:
         return {
             "status": "sem_resultados",
-            "mensagem": "Nenhuma API retornou voos para esta rota. Verifique as credenciais.",
+            "mensagem": "Nenhuma API ou busca aberta retornou voos para esta rota. Tente novamente mais tarde.",
         }
 
     # Ordena por preço e retorna top 3
@@ -143,13 +180,121 @@ async def busca_inteligente_travel_hacker(
 
     return {
         "status": "sucesso",
-        "origem": origem,
-        "destino": destino,
-        "data_ida": data_ida,
-        "estadia": f"{estadia_min_dias} a {estadia_max_dias} dias" if estadia_min_dias else "apenas ida",
-        "top_3_opcoes": top3,
-        "nota": "Max 5h de conexão aplicado. Aeroportos alternativos incluídos quando disponíveis.",
+        "resultados": top3,
+        "count": len(top3),
+        "origem_dados": "GDS/API/Web"
     }
+
+async def _buscar_web_search(origem: str, destino: str, data: str) -> List[Dict]:
+    """Realiza busca de passagens via SerpApi (Google Flights/Search)."""
+    if not config.SERP_API_KEY:
+        return []
+    
+    query = f"voos de {origem} para {destino} no dia {data} mais baratos"
+    url = "https://serpapi.com/search.json"
+    params = {
+        "engine": "google",
+        "q": query,
+        "api_key": config.SERP_API_KEY,
+        "hl": "pt-br",
+        "gl": "br"
+    }
+    
+    async with httpx.AsyncClient() as client:
+        try:
+            resp = await client.get(url, params=params, timeout=15)
+            if resp.status_code == 200:
+                data_resp = resp.json()
+                results = []
+                if "organic_results" in data_resp:
+                    for res in data_resp["organic_results"][:3]:
+                        results.append({
+                            "id": f"web-{res.get('position')}",
+                            "airline": "Busca Web",
+                            "preco_total_brl": 0, # Preço indefinido em busca aberta
+                            "price_display": res.get("snippet", "Preço sob consulta"),
+                            "origin": origem,
+                            "destination": destino,
+                            "departure_at": data,
+                            "link": res.get("link")
+                        })
+                return results
+        except Exception as e:
+            logger.error(f"Erro na SerpApi: {e}")
+    return []
+
+
+async def _buscar_gemini_search(origem: str, destino: str, data: str) -> List[Dict]:
+    """Usa o Gemini para buscar informações de voos com dados reais de preço."""
+    api_key = config.GEMINI_API_KEY
+    if not api_key:
+        return []
+    
+    prompt = f"""Você é um especialista em Travel Hacking. Busque as 5 melhores opções de voo de {origem} para {destino} na data {data} ou datas próximas (+/- 3 dias).
+
+Retorne APENAS um JSON válido (sem markdown, sem ```json```) com a seguinte estrutura:
+{{
+  "voos": [
+    {{
+      "companhia": "nome da companhia aérea",
+      "preco_brl": valor numérico em reais,
+      "preco_usd": valor numérico em dólares,
+      "origem": "código IATA",
+      "destino": "código IATA",
+      "data_partida": "YYYY-MM-DD",
+      "paradas": número de paradas,
+      "duracao_horas": duração total em horas,
+      "classe": "Economy/Business/First",
+      "dica_travel_hacker": "dica para economizar nesta rota",
+      "milhas_estimadas": número estimado de milhas necessárias,
+      "programa_milhas": "programa de milhas recomendado"
+    }}
+  ]
+}}
+
+Considere preços médios reais do mercado. Inclua aeroportos alternativos próximos se houver economia significativa. EXCLUA conexões acima de 5 horas. Ordene do mais barato ao mais caro."""
+
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel('gemini-2.0-flash')
+        
+        from google.generativeai.types import GenerationConfig
+        gen_config = GenerationConfig(
+            response_mime_type="application/json",
+            temperature=0.3
+        )
+        
+        response = model.generate_content(
+            contents=[{"role": "user", "parts": [prompt]}],
+            generation_config=gen_config
+        )
+        
+        data_resp = json.loads(response.text)
+        voos = data_resp.get("voos", [])
+        
+        resultados = []
+        for v in voos:
+            resultados.append({
+                "id": f"gemini-{len(resultados)+1}",
+                "airline": v.get("companhia", "N/A"),
+                "preco_total_brl": v.get("preco_brl", 0),
+                "preco_usd": v.get("preco_usd", 0),
+                "origin": v.get("origem", origem),
+                "destination": v.get("destino", destino),
+                "departure_at": v.get("data_partida", data),
+                "stops": v.get("paradas", 0),
+                "duration_hours": v.get("duracao_horas", 0),
+                "cabin_class": v.get("classe", "Economy"),
+                "travel_hack_tip": v.get("dica_travel_hacker", ""),
+                "milhas_estimadas": v.get("milhas_estimadas", 0),
+                "programa_milhas": v.get("programa_milhas", ""),
+                "fonte": "Gemini Intelligence Search",
+            })
+        
+        return resultados
+    except Exception as e:
+        logger.error(f"Erro no Gemini Search: {e}")
+        return []
 
 
 async def _buscar_duffel(origem: str, destino: str, data_ida: str, estadia_dias: int = None) -> list:

@@ -7,6 +7,7 @@ from langgraph.prebuilt import ToolNode
 from core.agent_state import AgentState
 from core.skills_registry import registry
 from core.health_matrix import get_redundant_llm
+from core.api_healer import healer
 
 logger = logging.getLogger(__name__)
 
@@ -42,7 +43,23 @@ async def call_model(state: AgentState) -> dict:
         return {"messages": [response]}
     except Exception as e:
         logger.error(f"Erro ao chamar LLM: {e}")
-        # Em caso de erro severo, retorna mensagem amigável e encerra
+        
+        # Lógica de Self-Healing para Gemini
+        err_str = str(e).upper()
+        if "API_KEY" in err_str or "UNAUTHORIZED" in err_str or "401" in err_str or "403" in err_str:
+            logger.warning("🚨 Falha de Autenticação detectada no LLM. Acionando Healer...")
+            new_key = await healer.recover_google_gemini_key()
+            if new_key:
+                logger.info("✅ Nova chave Gemini obtida. Re-tentando loop...")
+                # Re-vincula o LLM com a nova chave (na prática o get_redundant_llm pegará do env atualizado)
+                try:
+                    new_llm = get_redundant_llm()
+                    new_llm_with_tools = new_llm.bind_tools(tools)
+                    response = await new_llm_with_tools.ainvoke(messages)
+                    return {"messages": [response]}
+                except: pass
+
+        # Em caso de erro persistente, retorna mensagem amigável e encerra
         error_msg = AIMessage(content="Comandante enfrentando forte turbulência nos satélites de comunicação. Retente em minutos.")
         return {"messages": [error_msg]}
 

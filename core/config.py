@@ -36,9 +36,16 @@ class Config:
     BRIGHTDATA_PROXY_URL = os.getenv("PROXY_URL")
     CAPSOLVER_API_KEY = os.getenv("CAPSOLVER_API_KEY")
     
-    # Aviação (Amadeus)
+    # Aviação (Amadeus — credenciais 401 em 2026-05-13, fallback ativo)
     AMADEUS_CLIENT_ID = os.getenv("AMADEUS_CLIENT_ID")
     AMADEUS_CLIENT_SECRET = os.getenv("AMADEUS_CLIENT_SECRET")
+    
+    # Aviação (Duffel — ATIVO e funcional ✅)
+    DUFFEL_API_KEY = os.getenv("DUFFEL_API_KEY")
+    
+    # Web Search Fallbacks
+    SERP_API_KEY = os.getenv("SERP_API_KEY")
+    TAVILY_API_KEY = os.getenv("TAVILY_API_KEY")
     
     # Telegram
     TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")

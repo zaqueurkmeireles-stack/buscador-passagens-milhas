@@ -108,4 +108,43 @@ async def auditar_apis_e_redundancia() -> Dict[str, str]:
         logger.error(f"Erro no teste CapSolver: {e}")
         status_matrix["CapSolver_API"] = f"[🔴 DOWN] Erro: {str(e)}"
 
+    # 5. Teste Duffel API (PRIMÁRIO para buscas de voos)
+    try:
+        if config.DUFFEL_API_KEY:
+            headers = {
+                "Authorization": f"Bearer {config.DUFFEL_API_KEY}",
+                "Accept": "application/json",
+                "Duffel-Version": "v2"
+            }
+            response = requests.get("https://api.duffel.com/air/airports?limit=1", headers=headers, timeout=5)
+            if response.status_code == 200:
+                status_matrix["Duffel_API"] = "[🟢 UP] (Primário GDS)"
+            else:
+                status_matrix["Duffel_API"] = f"[🔴 DOWN] Status Code: {response.status_code}"
+        else:
+            status_matrix["Duffel_API"] = "[🟡 WARNING] DUFFEL_API_KEY não configurada."
+    except Exception as e:
+        logger.error(f"Erro no teste Duffel: {e}")
+        status_matrix["Duffel_API"] = f"[🔴 DOWN] Erro: {str(e)}"
+
+    # 6. Teste Gemini API (Fallback Intelligence Search)
+    try:
+        if config.GEMINI_API_KEY:
+            response = requests.post(
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={config.GEMINI_API_KEY}",
+                json={"contents": [{"parts": [{"text": "PING reply PONG"}]}]},
+                timeout=5
+            )
+            if response.status_code == 200:
+                status_matrix["Gemini_Search"] = "[🟢 UP] (Fallback Intelligence)"
+            elif response.status_code == 429:
+                status_matrix["Gemini_Search"] = "[🟡 RATE_LIMITED] Quota excedida temporariamente."
+            else:
+                status_matrix["Gemini_Search"] = f"[🔴 DOWN] Status Code: {response.status_code}"
+        else:
+            status_matrix["Gemini_Search"] = "[🟡 WARNING] GEMINI_API_KEY não configurada."
+    except Exception as e:
+        logger.error(f"Erro no teste Gemini: {e}")
+        status_matrix["Gemini_Search"] = f"[🔴 DOWN] Erro: {str(e)}"
+
     return status_matrix
