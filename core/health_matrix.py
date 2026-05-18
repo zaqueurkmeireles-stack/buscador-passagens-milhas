@@ -19,7 +19,7 @@ def get_redundant_llm():
     """
     # LLM Primário: Gemini
     primary_llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash", 
+        model="gemini-2.0-flash", 
         google_api_key=config.GEMINI_API_KEY,
         temperature=0
     )
