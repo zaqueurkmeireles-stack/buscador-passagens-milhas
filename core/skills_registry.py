@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import json
 import hashlib
@@ -264,11 +265,12 @@ Considere preços médios reais do mercado. Inclua aeroportos alternativos próx
             temperature=0.3
         )
         
-        response = model.generate_content(
+        response = await asyncio.to_thread(
+            model.generate_content,
             contents=[{"role": "user", "parts": [prompt]}],
-            generation_config=gen_config
+            generation_config=gen_config,
         )
-        
+
         data_resp = json.loads(response.text)
         voos = data_resp.get("voos", [])
         

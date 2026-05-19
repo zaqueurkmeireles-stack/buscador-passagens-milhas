@@ -382,7 +382,15 @@ async def _run_arbitrage_async():
         async with httpx.AsyncClient(headers=_clean_headers(), timeout=30) as client:
             for alerta in alertas:
                 try:
-                    params = json.loads(alerta["parametros_busca"])
+                    params = alerta["parametros_busca"]
+                    if isinstance(params, str):
+                        params = json.loads(params)
+                    elif not isinstance(params, dict):
+                        logger.warning(
+                            f"[CPM] parametros_busca inválido (tipo {type(params).__name__}): {params}"
+                        )
+                        continue
+
                     origem = params.get("origem", "").upper()
                     destino = params.get("destino", "").upper()
                     data = params.get("data_ida") or params.get("data", "")

@@ -12,15 +12,27 @@ services:
       - redis
     restart: unless-stopped
 
-  # Serviço Celery: O "músculo" que roda o Scraper em background nas madrugadas
+  # Worker Celery unificado: arbitragem CPM (4h) + sync milhas + demais tasks
   worker:
     build: .
     container_name: travel_agent_worker
-    command: celery -A workers.tasks worker --loglevel=info --concurrency=1
+    command: celery -A workers.celery_app worker --loglevel=info --concurrency=1 --max-tasks-per-child=10
     env_file:
       - .env
     depends_on:
       - redis
+    restart: unless-stopped
+
+  # Beat: dispara run_arbitrage_check a cada N horas e sync de milhas às 03:00
+  beat:
+    build: .
+    container_name: travel_agent_beat
+    command: celery -A workers.celery_app beat --loglevel=info
+    env_file:
+      - .env
+    depends_on:
+      - redis
+      - worker
     restart: unless-stopped
 
   # Broker de Mensagens para o Celery

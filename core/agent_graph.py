@@ -130,7 +130,14 @@ async def processar_mensagem_telegram(mensagem: str, chat_id: str) -> str:
     # Invoca o grafo compilado de forma assíncrona
     final_state = await agent_app.ainvoke(initial_state)
     
-    # Extrai a última mensagem gerada pelo Agente
+    # Extrai a última mensagem gerada pelo Agente (conteúdo seguro para o Telegram)
     last_message = final_state["messages"][-1]
-    
-    return last_message.content
+    content = getattr(last_message, "content", None)
+    if isinstance(content, list):
+        content = "\n".join(str(part) for part in content)
+    if not content:
+        content = (
+            "Comandante, não consegui montar a resposta final. "
+            "Tente reformular a busca com origem, destino e data."
+        )
+    return str(content)

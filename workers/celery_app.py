@@ -17,6 +17,7 @@ celery_app = Celery(
         'workers.golden_windows',
         'workers.positioning',
         'workers.cpm_engine',
+        'workers.tasks',
     ]
 )
 
@@ -28,6 +29,11 @@ celery_app.conf.beat_schedule = {
     'arbitrage-check-every-n-hours': {
         'task': 'workers.cpm_engine.run_arbitrage_check',
         'schedule': timedelta(hours=_arbitrage_interval_h),
+    },
+    # Sync de carteiras de milhas — diariamente às 03:00
+    'sync-miles-every-day-3am': {
+        'task': 'workers.tasks.sync_mileage_wallets',
+        'schedule': crontab(hour=3, minute=0),
     },
 }
 

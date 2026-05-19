@@ -15,6 +15,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+if not config.TELEGRAM_BOT_TOKEN:
+    raise SystemExit("TELEGRAM_BOT_TOKEN ausente no .env — abortando boot.")
+
 # Inicialização do Bot e Dispatcher usando as credenciais extraídas via config
 bot = Bot(token=config.TELEGRAM_BOT_TOKEN)
 dp = Dispatcher()
