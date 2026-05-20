@@ -14,6 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Copia os requisitos e instala dependências do Python
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install google-generativeai==0.8.4
 
 # Comando vital: Instala os binários do Chromium e as dependências nativas
 # Apenas Chromium para economizar RAM e disco
