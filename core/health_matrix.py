@@ -19,7 +19,7 @@ def get_redundant_llm():
     """
     # LLM Primário: Gemini
     primary_llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-flash-latest", 
+        model="gemini-1.5-flash", 
         google_api_key=config.GEMINI_API_KEY,
         temperature=0
     )
@@ -131,7 +131,7 @@ async def auditar_apis_e_redundancia() -> Dict[str, str]:
     try:
         if config.GEMINI_API_KEY:
             response = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key={config.GEMINI_API_KEY}",
+                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={config.GEMINI_API_KEY}",
                 json={"contents": [{"parts": [{"text": "PING reply PONG"}]}]},
                 timeout=5
             )
