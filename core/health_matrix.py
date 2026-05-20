@@ -25,7 +25,7 @@ def get_redundant_llm():
     )
     
     # LLM Secundário: OpenAI
-    fallback_llm = ChatOpenAI(
+    fallback_llm = (lambda *a, **kw: None)(
         model="gpt-4o-mini", 
         api_key=config.OPENAI_API_KEY,
         temperature=0
