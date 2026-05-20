@@ -257,7 +257,7 @@ Considere preços médios reais do mercado. Inclua aeroportos alternativos próx
 
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-2.0-flash')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         from google.generativeai.types import GenerationConfig
         gen_config = GenerationConfig(
