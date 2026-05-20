@@ -11,27 +11,37 @@ from core.config import config
 
 logger = logging.getLogger(__name__)
 
+
+def _apply_gemini_api_version(llm: ChatGoogleGenerativeAI) -> None:
+    """Força api_version no SDK google-genai (default da lib é v1beta)."""
+    client = getattr(llm, "client", None)
+    api_client = getattr(client, "_api_client", None) if client else None
+    http_opts = getattr(api_client, "_http_options", None) if api_client else None
+    if http_opts is not None:
+        http_opts.api_version = config.GEMINI_API_VERSION
+
+
 # Configuração Nativa de Fallbacks (LangChain)
 def get_redundant_llm():
     """
     Retorna o LLM principal configurado com fallbacks.
     Se o Gemini falhar (Rate Limit, Outage), roteia invisivelmente para a OpenAI.
     """
-    # LLM Primário: Gemini
+    # LLM Primário: Gemini (modelo validado via ListModels da API)
     primary_llm = ChatGoogleGenerativeAI(
-        model="gemini-1.5-pro", 
+        model=config.GEMINI_MODEL,
         google_api_key=config.GEMINI_API_KEY,
-        temperature=0
+        temperature=0,
     )
-    
-    # LLM Secundário: OpenAI
-    fallback_llm = (lambda *a, **kw: None)(
-        model="gpt-4o-mini", 
-        api_key=config.OPENAI_API_KEY,
-        temperature=0
-    )
-    
-    # Retorna a instância com fallback acoplado
+    _apply_gemini_api_version(primary_llm)
+
+    if config.OPENAI_API_KEY:
+        fallback_llm = ChatOpenAI(
+            model="gpt-4o-mini",
+            api_key=config.OPENAI_API_KEY,
+            temperature=0,
+        )
+        return primary_llm.with_fallbacks([fallback_llm])
     return primary_llm
 
 
@@ -131,7 +141,7 @@ async def auditar_apis_e_redundancia() -> Dict[str, str]:
     try:
         if config.GEMINI_API_KEY:
             response = requests.post(
-                f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key={config.GEMINI_API_KEY}",
+                f"https://generativelanguage.googleapis.com/{config.GEMINI_API_VERSION}/models/{config.GEMINI_MODEL}:generateContent?key={config.GEMINI_API_KEY}",
                 json={"contents": [{"parts": [{"text": "PING reply PONG"}]}]},
                 timeout=5
             )

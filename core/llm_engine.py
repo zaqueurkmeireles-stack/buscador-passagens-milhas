@@ -1,9 +1,9 @@
-import os
 import json
 import logging
 from typing import Dict, Any
 import google.generativeai as genai
 from google.generativeai.types import GenerationConfig
+from core.config import config
 
 # Configuração de log para o módulo
 logger = logging.getLogger(__name__)
@@ -16,17 +16,13 @@ class LLMEngine:
     """
 
     def __init__(self):
-        # As credenciais são carregadas estritamente a partir das variáveis de ambiente (.env)
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = config.GEMINI_API_KEY
         if not api_key:
-            logger.error("GEMINI_API_KEY não encontrada no ambiente.")
-            raise ValueError("Variável GEMINI_API_KEY não configurada no .env")
-        
-        # Configura o cliente do Gemini
+            logger.error("GOOGLE_GEMINI_API_KEY não encontrada no ambiente.")
+            raise ValueError("Variável GOOGLE_GEMINI_API_KEY não configurada no .env")
+
         genai.configure(api_key=api_key)
-        
-        # Utiliza o modelo recomendado para tarefas que misturam raciocínio e estruturação (flash ou pro)
-        self.model = genai.GenerativeModel('gemini-1.5-pro')
+        self.model = genai.GenerativeModel(config.GEMINI_MODEL)
         
         # System prompt estrito para forçar o papel e a saída JSON
         self.system_prompt = """Você é um viajante experiente e um consultor de aviação de alta performance (Travel Hacker). O seu objetivo é sempre entregar as 3 maneiras mais baratas e inteligentes de voar. Automaticamente, você deve considerar: aeroportos alternativos ou cidades próximas ao destino, opções com flexibilidade de horários (+/- 1 a 3 dias se aplicável), e EXCLUIR sumariamente conexões que demorem mais de 5 horas. Ao apresentar os resultados, mostre comparações de preços totais (dinheiro vs. milhas) e as companhias aéreas recomendadas.

@@ -14,7 +14,8 @@ async def test_llms():
     print(f"Gemini Key: {gemini_key[:10]}...")
     
     try:
-        llm = ChatGoogleGenerativeAI(model="gemini-1.5-pro", google_api_key=gemini_key)
+        from core.config import config
+        llm = get_redundant_llm()
         res = await llm.ainvoke([HumanMessage(content="Hello")])
         print("GEMINI SUCESSO:", res.content)
     except Exception as e:
