@@ -7,3 +7,5 @@ amadeus
 google-generativeai==0.8.4
 playwright
 python-dotenv
+psycopg2-binary
+requests
