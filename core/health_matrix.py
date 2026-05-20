@@ -32,7 +32,7 @@ def get_redundant_llm():
     )
     
     # Retorna a instância com fallback acoplado
-    return primary_llm.with_fallbacks([fallback_llm])
+    return primary_llm
 
 
 @tool
