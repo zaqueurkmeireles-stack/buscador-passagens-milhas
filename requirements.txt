@@ -5,3 +5,4 @@ supabase
 langgraph
 amadeus
 google-generativeai==0.8.4
+playwright
