@@ -18,7 +18,8 @@ class Config:
     GEMINI_API_KEY = os.getenv("GOOGLE_GEMINI_API_KEY")
     # Modelo deve existir em ListModels (gemini-1.5-pro foi descontinuado na API)
     GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
-    GEMINI_API_VERSION = os.getenv("GEMINI_API_VERSION", "v1")
+    # v1beta: exigido pelo LangChain/google-genai para system_instruction + tools no agente
+    GEMINI_API_VERSION = os.getenv("GEMINI_API_VERSION", "v1beta")
     OPENAI_API_KEY = os.getenv("OPENAI_API_KEY") # Usada para Fallback e Embeddings
     
     # Orquestração (LangGraph)

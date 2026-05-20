@@ -12,15 +12,6 @@ from core.config import config
 logger = logging.getLogger(__name__)
 
 
-def _apply_gemini_api_version(llm: ChatGoogleGenerativeAI) -> None:
-    """Força api_version no SDK google-genai (default da lib é v1beta)."""
-    client = getattr(llm, "client", None)
-    api_client = getattr(client, "_api_client", None) if client else None
-    http_opts = getattr(api_client, "_http_options", None) if api_client else None
-    if http_opts is not None:
-        http_opts.api_version = config.GEMINI_API_VERSION
-
-
 # Configuração Nativa de Fallbacks (LangChain)
 def get_redundant_llm():
     """
@@ -33,7 +24,6 @@ def get_redundant_llm():
         google_api_key=config.GEMINI_API_KEY,
         temperature=0,
     )
-    _apply_gemini_api_version(primary_llm)
 
     if config.OPENAI_API_KEY:
         fallback_llm = ChatOpenAI(
