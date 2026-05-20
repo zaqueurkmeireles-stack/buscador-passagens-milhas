@@ -131,7 +131,7 @@ async def auditar_apis_e_redundancia() -> Dict[str, str]:
     try:
         if config.GEMINI_API_KEY:
             response = requests.post(
-                f"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key={config.GEMINI_API_KEY}",
+                f"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-pro:generateContent?key={config.GEMINI_API_KEY}",
                 json={"contents": [{"parts": [{"text": "PING reply PONG"}]}]},
                 timeout=5
             )

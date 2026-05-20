@@ -16,7 +16,7 @@ def testar_telegram():
 def testar_gemini():
     chave = os.getenv("GOOGLE_GEMINI_API_KEY")
     if not chave: return "⚠️ NÃO ENCONTRADA"
-    r = requests.get(f"https://generativelanguage.googleapis.com/v1beta/models?key={chave}")
+    r = requests.get(f"https://generativelanguage.googleapis.com/v1/models?key={chave}")
     return "✅ SUCESSO (Acesso Autorizado)" if r.status_code == 200 else f"❌ ERRO {r.status_code}: Chave Inválida"
 
 def testar_openai():

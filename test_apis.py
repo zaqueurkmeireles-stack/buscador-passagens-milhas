@@ -11,7 +11,7 @@ async def testar_apis():
         except Exception as e: print('  ?? OpenAI: ? FALHA DE REDE')
 
         try:
-            r = await c.get('https://generativelanguage.googleapis.com/v1beta/models?key=' + str(os.getenv('GOOGLE_GEMINI_API_KEY')))
+            r = await c.get('https://generativelanguage.googleapis.com/v1/models?key=' + str(os.getenv('GOOGLE_GEMINI_API_KEY')))
             print('  ?? Gemini: ? OK' if r.status_code == 200 else f'  ?? Gemini: ? ERRO {r.status_code}')
         except Exception as e: print('  ?? Gemini: ? FALHA DE REDE')
 

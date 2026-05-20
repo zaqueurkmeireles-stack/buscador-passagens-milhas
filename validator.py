@@ -27,7 +27,7 @@ if os.getenv("OPENAI_API_KEY"):
     test_endpoint("OpenAI", "https://api.openai.com/v1/models", headers={"Authorization": f"Bearer {os.getenv('OPENAI_API_KEY')}"})
 
 if os.getenv("GOOGLE_GEMINI_API_KEY"):
-    test_endpoint("Google Gemini", f"https://generativelanguage.googleapis.com/v1beta/models?key={os.getenv('GOOGLE_GEMINI_API_KEY')}")
+    test_endpoint("Google Gemini", f"https://generativelanguage.googleapis.com/v1/models?key={os.getenv('GOOGLE_GEMINI_API_KEY')}")
 
 if os.getenv("ANTHROPIC_API_KEY"):
     test_endpoint("Anthropic", "https://api.anthropic.com/v1/messages", method="POST", json_data={"model": "claude-3-haiku-20240307", "max_tokens": 1, "messages": [{"role": "user", "content": "hi"}]}, headers={"x-api-key": os.getenv("ANTHROPIC_API_KEY"), "anthropic-version": "2023-06-01"})
