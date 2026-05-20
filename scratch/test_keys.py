@@ -9,7 +9,7 @@ print(f"Testing key: {key[:10]}...")
 
 genai.configure(api_key=key)
 try:
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    model = genai.GenerativeModel('gemini-1.5-flash-latest')
     response = model.generate_content("Ping")
     print(f"Gemini 1.5 Flash Response: {response.text}")
 except Exception as e:
